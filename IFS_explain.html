@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parabola IFS Generator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.2.0/math.min.js"></script>
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    canvas {
+      width: 100% !important;
+      height: 400px !important;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 p-6 min-h-screen">
+  <div class="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div>
+      <h1 class="text-2xl font-bold text-center text-blue-700 mb-4">Parabola as IFS Attractor</h1>
+      <canvas id="canvas" width="800" height="400"></canvas>
+      <div class="mt-6 space-y-4">
+        <div>
+          <label class="block mb-1">a:</label>
+          <input type="range" id="a" min="-30" max="30" step="0.01" value="-2" class="w-full">
+          <input type="number" id="a_val" value="-2" min="-30" max="30" class="w-full border mt-1 p-1">
+        </div>
+        <div>
+          <label class="block mb-1">b:</label>
+          <input type="range" id="b" min="-30" max="30" step="0.01" value="2" class="w-full">
+          <input type="number" id="b_val" value="2" min="-30" max="30" class="w-full border mt-1 p-1">
+        </div>
+        <div>
+          <label class="block mb-1">u1 (tỷ lệ co f1):</label>
+          <input type="range" id="u1" min="0.1" max="0.9" step="0.01" value="0.5" class="w-full">
+          <input type="number" id="u1_val" value="0.5" min="0.1" max="0.9" step="0.01" class="w-full border mt-1 p-1">
+        </div>
+        <div>
+          <label class="block mb-1">u2 (tỷ lệ co f2):</label>
+          <input type="range" id="u2" min="0.1" max="0.9" step="0.01" value="0.4" class="w-full">
+          <input type="number" id="u2_val" value="0.4" min="0.1" max="0.9" step="0.01" class="w-full border mt-1 p-1">
+        </div>
+        <div>
+          <label class="block mb-1">b1 (tịnh tiến x):</label>
+          <input type="range" id="b1" min="-2" max="2" step="0.01" value="0.5" class="w-full">
+          <input type="number" id="b1_val" value="0.5" min="-2" max="2" step="0.01" class="w-full border mt-1 p-1">
+        </div>
+      </div>
+    </div>
+    <div>
+      <h2 class="text-lg font-semibold text-gray-800 mb-2">Công thức hệ hàm co phụ thuộc a, b, u1, u2, b1 (p1 = p2 = 0.5):</h2>
+      <div id="formulas" class="text-sm text-gray-800">
+        \[
+        \begin{align}
+        f_1(x, y) &= \begin{pmatrix} u_1 & 0 \\ b u_1 (1 - u_1) & u_1^2 \end{pmatrix} \begin{pmatrix} x \\ y \end{pmatrix} \\
+        f_2(x, y) &= \begin{pmatrix} u_2 & 0 \\ a u_2 + b u_2 (1 - u_2) & u_2^2 \end{pmatrix} \begin{pmatrix} x \\ y \end{pmatrix} + \begin{pmatrix} b_1 \\ a b_1^2 + b b_1 \end{pmatrix} \\
+        \end{align}
+        \]
+        Attractor của hệ hàm lặp trên có phương trình là: \\
+        \[
+        y = a x^2 + b x
+        \]
+      </div>
+      <div id="coeffOutput" class="text-sm text-gray-800 mt-4"></div>
+    </div>
+  </div>
+<script>
+window.onload = function () {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const aSlider = document.getElementById('a');
+  const bSlider = document.getElementById('b');
+  const u1Slider = document.getElementById('u1');
+  const u2Slider = document.getElementById('u2');
+  const b1Slider = document.getElementById('b1');
+  const aVal = document.getElementById('a_val');
+  const bVal = document.getElementById('b_val');
+  const u1Val = document.getElementById('u1_val');
+  const u2Val = document.getElementById('u2_val');
+  const b1Val = document.getElementById('b1_val');
+  const formulas = document.getElementById('formulas');
+  const coeffOutput = document.getElementById('coeffOutput');
+
+  // Hàm định dạng hệ số
+  function formatCoefficient(value) {
+    if (Number.isInteger(value) || Math.abs(value - Math.floor(value)) < 1e-10) {
+      return Math.floor(value).toString(); // Số nguyên: không thập phân
+    }
+    return value.toFixed(2); // Số thập phân: 2 chữ số
+  }
+
+  function getIFS(a, b, u1, u2, b1) {
+    const f1 = {
+      M: [[u1, 0], [b * u1 * (1 - u1), u1 * u1]],
+      b: [0, 0]
+    };
+    const f2 = {
+      M: [[u2, 0], [a * u2 + b * u2 * (1 - u2), u2 * u2]],
+      b: [b1, a * b1 * b1 + b * b1]
+    };
+    return [f1, f2];
+  }
+
+  function drawIFS(ifs, probs) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let pt = [Math.random(), Math.random()];
+    for (let i = 0; i < 30000; i++) {
+      const rand = Math.random();
+      const idx = rand < probs[0] ? 0 : 1;
+      const f = ifs[idx];
+      pt = math.add(math.multiply(f.M, pt), f.b);
+      // Map x from [-0.03, 1.5] to [0, 800]
+      const x = ((pt[0] + 0.03) / 1.53) * canvas.width;
+      // Map y from [-0.03, 4.5] to [400, 0]
+      const y = canvas.height - ((pt[1] + 0.03) / 4.53) * canvas.height;
+      ctx.fillStyle = idx === 0 ? '#00cc44' : '#cc0033';
+      ctx.fillRect(x, y, 3, 3);
+    }
+  }
+
+  function update() {
+    const a = parseFloat(aSlider.value);
+    const b = parseFloat(bSlider.value);
+    const u1 = parseFloat(u1Slider.value);
+    const u2 = parseFloat(u2Slider.value);
+    const b1 = parseFloat(b1Slider.value);
+    aVal.value = a;
+    bVal.value = b;
+    u1Val.value = u1;
+    u2Val.value = u2;
+    b1Val.value = b1;
+    const ifs = getIFS(a, b, u1, u2, b1);
+    const probs = [0.5, 0.5]; // p1 = p2 = 0.5
+    drawIFS(ifs, probs);
+    const v1 = b * u1 * (1 - u1);
+    const w1 = u1 * u1;
+    const v2 = a * u2 + b * u2 * (1 - u2);
+    const w2 = u2 * u2;
+    const b2 = a * b1 * b1 + b * b1;
+    const aFormatted = formatCoefficient(a);
+    const bFormatted = formatCoefficient(b);
+    const u1Formatted = formatCoefficient(u1);
+    const u2Formatted = formatCoefficient(u2);
+    const b1Formatted = formatCoefficient(b1);
+    const v1Formatted = formatCoefficient(v1);
+    const w1Formatted = formatCoefficient(w1);
+    const v2Formatted = formatCoefficient(v2);
+    const w2Formatted = formatCoefficient(w2);
+    const b2Formatted = formatCoefficient(b2);
+    coeffOutput.innerHTML = `\\[ \\begin{align} 
+      f_1(x, y) &= \\begin{pmatrix} ${u1Formatted} & 0 \\\\ ${v1Formatted} & ${w1Formatted} \\end{pmatrix} \\begin{pmatrix} x \\\\ y \\end{pmatrix} \\\\
+      f_2(x, y) &= \\begin{pmatrix} ${u2Formatted} & 0 \\\\ ${v2Formatted} & ${w2Formatted} \\end{pmatrix} \\begin{pmatrix} x \\\\ y \\end{pmatrix} + \\begin{pmatrix} ${b1Formatted} \\\\ ${b2Formatted} \\end{pmatrix} \\\\
+      \\text{Attractor:} \\quad y &= ${aFormatted} x^2 + ${bFormatted} x
+    \\end{align} \\]`;
+    if (window.MathJax) MathJax.typesetPromise([coeffOutput]);
+  }
+
+  aSlider.addEventListener('input', update);
+  bSlider.addEventListener('input', update);
+  u1Slider.addEventListener('input', update);
+  u2Slider.addEventListener('input', update);
+  b1Slider.addEventListener('input', update);
+  aVal.addEventListener('change', () => { aSlider.value = aVal.value; update(); });
+  bVal.addEventListener('change', () => { bSlider.value = bVal.value; update(); });
+  u1Val.addEventListener('change', () => { u1Slider.value = u1Val.value; update(); });
+  u2Val.addEventListener('change', () => { u2Slider.value = u2Val.value; update(); });
+  b1Val.addEventListener('change', () => { b1Slider.value = b1Val.value; update(); });
+
+  if (window.MathJax) MathJax.typesetPromise([formulas]);
+  update();
+};
+</script>
+</body>
+</html>
