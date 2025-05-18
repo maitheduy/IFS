@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parabola IFS Generator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.2.0/math.min.js"></script>
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    canvas {
+      width: 100% !important;
+      height: 400px !important;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 p-6 min-h-screen">
+  <div class="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div>
+      <h1 class="text-2xl font-bold text-center text-blue-700 mb-4">Parabola as IFS Attractor</h1>
+      <canvas id="canvas" width="800" height="400"></canvas>
+      <div class="mt-6 space-y-4">
+        <div>
+          <label class="block mb-1">a:</label>
+          <input type="range" id="a" min="-30" max="30" step="0.01" value="-2" class="w-full">
+          <input type="number" id="a_val" value="-2" min="-30" max="30" class="w-full border mt-1 p-1">
+        </div>
+        <div>
+          <label class="block mb-1">b:</label>
+          <input type="range" id="b" min="-30" max="30" step="0.01" value="2" class="w-full">
+          <input type="number" id="b_val" value="2" min="-30" max="30" class="w-full border mt-1 p-1">
+        </div>
+        <div>
+          <label class="block mb-1">c:</label>
+          <input type="range" id="c" min="-30" max="30" step="0.01" value="0" class="w-full">
+          <input type="number" id="c_val" value="0" min="-30" max="30" class="w-full border mt-1 p-1">
+        </div>
+      </div>
+    </div>
+    <div>
+      <h2 class="text-lg font-semibold text-gray-800 mb-2">Công thức hệ hàm co phụ thuộc a, b, c (u = 0.5):</h2>
+      <div id="formulas" class="text-sm text-gray-800">
+        \[
+        \begin{align}
+        f_1(x, y) &= \begin{pmatrix} 0.5 & 0 \\ 0.25 b & 0.25 \end{pmatrix} \begin{pmatrix} x \\ y \end{pmatrix} + \begin{pmatrix} 0 \\ 0.75 c \end{pmatrix} \\
+        f_2(x, y) &= \begin{pmatrix} 0.5 & 0 \\ 0.5 a + 0.25 b & 0.25 \end{pmatrix} \begin{pmatrix} x \\ y \end{pmatrix} + \begin{pmatrix} 0.5 \\ 0.25 a + 0.5 b + 0.75 c \end{pmatrix} \\
+        \end{align}
+        \]
+        Attractor của hệ hàm lặp trên có phương trình là: \\
+        \[
+        y = a x^2 + b x + c
+        \]
+      </div>
+      <div id="coeffOutput" class="text-sm text-gray-800 mt-4"></div>
+    </div>
+  </div>
+<script>
+window.onload = function () {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const aSlider = document.getElementById('a');
+  const bSlider = document.getElementById('b');
+  const cSlider = document.getElementById('c');
+  const aVal = document.getElementById('a_val');
+  const bVal = document.getElementById('b_val');
+  const cVal = document.getElementById('c_val');
+  const formulas = document.getElementById('formulas');
+  const coeffOutput = document.getElementById('coeffOutput');
+  const u = 0.5; // Fixed u
+
+  function getIFS(a, b, c) {
+    const f1 = {
+      M: [[u, 0], [u * b * (1 - u), u * u]],
+      b: [0, 0.75 * c]
+    };
+    const f2 = {
+      M: [[u, 0], [2 * a * u * u + b * u * (1 - u), u * u]],
+      b: [u, a * u * u + b * u + 0.75 * c]
+    };
+    return [f1, f2];
+  }
+
+  function drawIFS(ifs, probs) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let pt = [Math.random(), Math.random()];
+    for (let i = 0; i < 30000; i++) {
+      const rand = Math.random();
+      const idx = rand < probs[0] ? 0 : 1;
+      const f = ifs[idx];
+      pt = math.add(math.multiply(f.M, pt), f.b);
+      // Map x from [-0.03, 1.5] to [0, 800]
+      const x = ((pt[0] + 0.03) / 1.53) * canvas.width;
+      // Map y from [-0.03, 4.5] to [400, 0]
+      const y = canvas.height - ((pt[1] + 0.03) / 4.53) * canvas.height;
+      ctx.fillStyle = idx === 0 ? '#00cc44' : '#cc0033';
+      ctx.fillRect(x, y, 3, 3);
+    }
+  }
+
+  function update() {
+    const a = parseFloat(aSlider.value);
+    const b = parseFloat(bSlider.value);
+    const c = parseFloat(cSlider.value);
+    aVal.value = a;
+    bVal.value = b;
+    cVal.value = c;
+    const ifs = getIFS(a, b, c);
+    const probs = [u, 1 - u];
+    drawIFS(ifs, probs);
+    coeffOutput.innerHTML = `\\[ \\begin{align} 
+      f_1(x, y) &= \\begin{pmatrix} 0.5 & 0 \\\\ ${(0.25 * b).toFixed(2)} & 0.25 \\end{pmatrix} \\begin{pmatrix} x \\\\ y \\end{pmatrix} + \\begin{pmatrix} 0 \\\\ ${(0.75 * c).toFixed(2)} \\end{pmatrix} \\\\
+      f_2(x, y) &= \\begin{pmatrix} 0.5 & 0 \\\\ ${(0.5 * a + 0.25 * b).toFixed(2)} & 0.25 \\end{pmatrix} \\begin{pmatrix} x \\\\ y \\end{pmatrix} + \\begin{pmatrix} 0.5 \\\\ ${(0.25 * a + 0.5 * b + 0.75 * c).toFixed(2)} \\end{pmatrix} \\\\
+      \\text{Attractor:} \\quad y &= ${(a).toFixed(2)} x^2 + ${(b).toFixed(2)} x + ${(c).toFixed(2)}
+    \\end{align} \\]`;
+    if (window.MathJax) MathJax.typesetPromise([coeffOutput]);
+  }
+
+  aSlider.addEventListener('input', update);
+  bSlider.addEventListener('input', update);
+  cSlider.addEventListener('input', update);
+  aVal.addEventListener('change', () => { aSlider.value = aVal.value; update(); });
+  bVal.addEventListener('change', () => { bSlider.value = bVal.value; update(); });
+  cVal.addEventListener('change', () => { cSlider.value = cVal.value; update(); });
+
+  if (window.MathJax) MathJax.typesetPromise([formulas]);
+  update();
+};
+</script>
+</body>
+</html>
