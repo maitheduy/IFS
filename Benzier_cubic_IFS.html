@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cubic Bézier IFS Attractor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.2.0/math.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        canvas {
+            width: 100% !important;
+            height: 400px !important;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-center text-blue-700 mb-4">Cubic Bézier IFS Attractor (Chaos Game)</h1>
+            <canvas id="canvas" width="800" height="400"></canvas>
+            <div class="space-y-4 mt-6">
+                <div class="slider-container">
+                    <label>P1_x:</label>
+                    <input type="range" id="P1_x" min="-0.5" max="1.5" step="0.01" value="0.83">
+                    <input type="text" id="P1_x_text" value="0.83">
+                </div>
+                <div class="slider-container">
+                    <label>P1_y:</label>
+                    <input type="range" id="P1_y" min="-0.5" max="1.5" step="0.01" value="0.42">
+                    <input type="text" id="P1_y_text" value="0.42">
+                </div>
+                <div class="slider-container">
+                    <label>P2_x:</label>
+                    <input type="range" id="P2_x" min="-0.5" max="1.5" step="0.01" value="0.48">
+                    <input type="text" id="P2_x_text" value="0.48">
+                </div>
+                <div class="slider-container">
+                    <label>P2_y:</label>
+                    <input type="range" id="P2_y" min="-0.5" max="1.5" step="0.01" value="0.46">
+                    <input type="text" id="P2_y_text" value="0.46">
+                </div>
+            </div>
+        </div>
+        <div>
+            <h2 class="text-lg font-semibold text-gray-700 mb-2">Affine Transformations (IFS Functions):</h2>
+            <div id="mathjax-output" class="text-sm text-gray-800"></div>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const mathjaxDiv = document.getElementById('mathjax-output');
+
+        const colorMap = ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#46f0f0','#f032e6'];
+
+        const sliders = ['P1_x', 'P1_y', 'P2_x', 'P2_y'].reduce((obj, id) => {
+            obj[id] = document.getElementById(id);
+            return obj;
+        }, {});
+
+        const texts = ['P1_x_text', 'P1_y_text', 'P2_x_text', 'P2_y_text'].reduce((obj, id) => {
+            obj[id.replace('_text', '')] = document.getElementById(id);
+            return obj;
+        }, {});
+
+        function lerp(a, b, t) {
+            return [(1 - t) * a[0] + t * b[0], (1 - t) * a[1] + t * b[1]];
+        }
+
+        function subdivideBezier(P0, P1, P2, P3, t) {
+            const A = lerp(P0, P1, t);
+            const B = lerp(P1, P2, t);
+            const C = lerp(P2, P3, t);
+            const D = lerp(A, B, t);
+            const E = lerp(B, C, t);
+            const F = lerp(D, E, t);
+            return [
+                [P0, A, D, F],
+                [F, E, C, P3]
+            ];
+        }
+
+        function generateIFS(P0, P1, P2, P3, depth = 3) {
+            let segments = [[P0, P1, P2, P3]];
+            for (let i = 0; i < depth; i++) {
+                const next = [];
+                segments.forEach(seg => {
+                    next.push(...subdivideBezier(...seg, 0.5));
+                });
+                segments = next;
+            }
+            return segments.map(([A, B, C]) => {
+                const src = [P0, P1, P2];
+                const dst = [A, B, C];
+                const A_mat = math.matrix([
+                    [src[1][0] - src[0][0], src[2][0] - src[0][0]],
+                    [src[1][1] - src[0][1], src[2][1] - src[0][1]]
+                ]);
+                const B_mat = math.matrix([
+                    [dst[1][0] - dst[0][0], dst[2][0] - dst[0][0]],
+                    [dst[1][1] - dst[0][1], dst[2][1] - dst[0][1]]
+                ]);
+                const M = math.multiply(B_mat, math.inv(A_mat));
+                const b = math.subtract(dst[0], math.multiply(M, src[0]));
+                return { M: M._data, b: b._data };
+            });
+        }
+
+        function displayIFSFormulas(ifsList) {
+            mathjaxDiv.innerHTML = '';
+            ifsList.forEach((f, idx) => {
+                const M = f.M;
+                const b = f.b;
+                const formula = `<div>\\[ f_${idx + 1}(x, y) = (${M[0][0].toFixed(2)}x + ${M[0][1].toFixed(2)}y + ${b[0].toFixed(2)};\ \n` +
+                                  `${M[1][0].toFixed(2)}x + ${M[1][1].toFixed(2)}y + ${b[1].toFixed(2)}) \\]</div>`;
+                mathjaxDiv.innerHTML += formula;
+            });
+            if (window.MathJax) MathJax.typesetPromise([mathjaxDiv]);
+        }
+
+        function drawChaos(P0, P1, P2, P3) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const maps = generateIFS(P0, P1, P2, P3);
+            displayIFSFormulas(maps);
+            let pt = [Math.random(), Math.random()];
+            for (let i = 0; i < 30000; i++) {
+                const idx = Math.floor(Math.random() * maps.length);
+                const f = maps[idx];
+                pt = math.add(math.multiply(f.M, pt), f.b);
+                const x = pt[0] * canvas.width;
+                const y = (1 - pt[1]) * canvas.height;
+                ctx.fillStyle = colorMap[idx % colorMap.length];
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+
+        function update() {
+            const P0 = [0, 0];
+            const P1 = [parseFloat(sliders.P1_x.value), parseFloat(sliders.P1_y.value)];
+            const P2 = [parseFloat(sliders.P2_x.value), parseFloat(sliders.P2_y.value)];
+            const P3 = [1, 0];
+
+            texts.P1_x.value = P1[0].toFixed(2);
+            texts.P1_y.value = P1[1].toFixed(2);
+            texts.P2_x.value = P2[0].toFixed(2);
+            texts.P2_y.value = P2[1].toFixed(2);
+
+            drawChaos(P0, P1, P2, P3);
+        }
+
+        Object.keys(sliders).forEach(k => sliders[k].addEventListener('input', update));
+        Object.keys(texts).forEach(k => texts[k].addEventListener('change', () => {
+            const val = parseFloat(texts[k].value);
+            if (isNaN(val) || val < -0.5 || val > 1.5) return;
+            sliders[k].value = val;
+            update();
+        }));
+
+        update();
+    </script>
+</body>
+</html>
