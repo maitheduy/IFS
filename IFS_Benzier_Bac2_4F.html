@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quadratic Bézier Parabola IFS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.2.0/math.min.js"></script>
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    canvas { width: 100% !important; height: 400px !important; border: 1px solid #ccc; }
+  </style>
+</head>
+<body class="bg-gray-100 p-6 min-h-screen">
+  <div class="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div>
+      <h1 class="text-2xl font-bold text-blue-700 text-center mb-4">Quadratic Bézier Parabola IFS (Chaos Game)</h1>
+      <canvas id="canvas" width="800" height="400"></canvas>
+      <div class="grid grid-cols-2 gap-2 mt-4">
+        <div><label class="block text-sm">P₀ₓ</label><div class="flex gap-2"><input id="P0_x" type="range" min="-0.5" max="1.5" step="0.01" value="0" class="w-full"><input id="P0_x_val" type="number" min="-0.5" max="1.5" step="0.01" value="0" class="w-20 border px-1"></div></div>
+        <div><label class="block text-sm">P₀ᵧ</label><div class="flex gap-2"><input id="P0_y" type="range" min="-0.5" max="1.5" step="0.01" value="0" class="w-full"><input id="P0_y_val" type="number" min="-0.5" max="1.5" step="0.01" value="0" class="w-20 border px-1"></div></div>
+        <div><label class="block text-sm">P₁ₓ</label><div class="flex gap-2"><input id="P1_x" type="range" min="-0.5" max="1.5" step="0.01" value="0.5" class="w-full"><input id="P1_x_val" type="number" min="-0.5" max="1.5" step="0.01" value="0.5" class="w-20 border px-1"></div></div>
+        <div><label class="block text-sm">P₁ᵧ</label><div class="flex gap-2"><input id="P1_y" type="range" min="-0.5" max="1.5" step="0.01" value="1" class="w-full"><input id="P1_y_val" type="number" min="-0.5" max="1.5" step="0.01" value="1" class="w-20 border px-1"></div></div>
+        <div><label class="block text-sm">P₂ₓ</label><div class="flex gap-2"><input id="P2_x" type="range" min="-0.5" max="1.5" step="0.01" value="1" class="w-full"><input id="P2_x_val" type="number" min="-0.5" max="1.5" step="0.01" value="1" class="w-20 border px-1"></div></div>
+        <div><label class="block text-sm">P₂ᵧ</label><div class="flex gap-2"><input id="P2_y" type="range" min="-0.5" max="1.5" step="0.01" value="0" class="w-full"><input id="P2_y_val" type="number" min="-0.5" max="1.5" step="0.01" value="0" class="w-20 border px-1"></div></div>
+      </div>
+    </div>
+    <div>
+      <h2 class="text-lg font-semibold mb-2">Affine Transformations (IFS Functions)</h2>
+      <div id="mathjax-output" class="text-sm text-gray-800"></div>
+      <h2 class="text-lg font-semibold mt-4 mb-2">Parabola Parametric Equation</h2>
+      <div id="bezier-equation" class="text-sm text-gray-800"></div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const mathjaxDiv = document.getElementById("mathjax-output");
+    const colorMap = ['#e6194b','#3cb44b','#ffe119','#4363d8'];
+
+    const controls = ['P0_x','P0_y','P1_x','P1_y','P2_x','P2_y'].reduce((obj,id)=>{
+      obj[id] = document.getElementById(id);
+      obj[id + '_val'] = document.getElementById(id + '_val');
+      obj[id].addEventListener('input', () => {
+        obj[id + '_val'].value = obj[id].value;
+        update();
+      });
+      obj[id + '_val'].addEventListener('input', () => {
+        obj[id].value = obj[id + '_val'].value;
+        update();
+      });
+      return obj;
+    },{});
+
+    function lerp(a, b, t) {
+      return [(1 - t) * a[0] + t * b[0], (1 - t) * a[1] + t * b[1]];
+    }
+
+    function subdivideBezier2(P0, P1, P2, t) {
+      const A = lerp(P0, P1, t);
+      const B = lerp(P1, P2, t);
+      const C = lerp(A, B, t);
+      return [[P0, A, C], [C, B, P2]];
+    }
+
+    function generateIFS(P0, P1, P2, depth = 2) {
+      let segments = [[P0, P1, P2]];
+      for (let i = 0; i < depth; i++) {
+        const next = [];
+        segments.forEach(seg => next.push(...subdivideBezier2(...seg, 0.5)));
+        segments = next;
+      }
+      return segments.map(([A, B, C]) => {
+        const src = [P0, P1, P2];
+        const dst = [A, B, C];
+        const A_mat = math.matrix([
+          [src[1][0] - src[0][0], src[2][0] - src[0][0]],
+          [src[1][1] - src[0][1], src[2][1] - src[0][1]]
+        ]);
+        const B_mat = math.matrix([
+          [dst[1][0] - dst[0][0], dst[2][0] - dst[0][0]],
+          [dst[1][1] - dst[0][1], dst[2][1] - dst[0][1]]
+        ]);
+        const M = math.multiply(B_mat, math.inv(A_mat));
+        const b = math.subtract(dst[0], math.multiply(M, src[0]));
+        return { M: M._data, b: b._data };
+      });
+    }
+
+    function displayIFSFormulas(ifsList) {
+      mathjaxDiv.innerHTML = '';
+      ifsList.forEach((f, idx) => {
+        const M = f.M;
+        const b = f.b;
+        const formula = `<div>\\[ f_${idx + 1}(x, y) = \\begin{pmatrix} ${M[0][0].toFixed(2)}x + ${M[0][1].toFixed(2)}y + ${b[0].toFixed(2)} \\ ${M[1][0].toFixed(2)}x + ${M[1][1].toFixed(2)}y + ${b[1].toFixed(2)} \\end{pmatrix} \\]</div>`;
+        mathjaxDiv.innerHTML += formula;
+      });
+      if (window.MathJax) MathJax.typesetPromise([mathjaxDiv]);
+    }
+
+    function drawChaos(maps) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      let pt = [Math.random(), Math.random()];
+      for (let i = 0; i < 30000; i++) {
+        const idx = Math.floor(Math.random() * maps.length);
+        const f = maps[idx];
+        pt = math.add(math.multiply(f.M, pt), f.b);
+        const x = pt[0] * canvas.width;
+        const y = (1 - pt[1]) * canvas.height;
+        ctx.fillStyle = colorMap[idx % colorMap.length];
+        ctx.fillRect(x, y, 4, 4);
+      }
+    }
+
+    function displayPolynomial(P0, P1, P2) {
+      const [x0, y0] = P0, [x1, y1] = P1, [x2, y2] = P2;
+      function expand(p0, p1, p2) {
+        const a = p0 - 2*p1 + p2;
+        const b = -2*p0 + 2*p1;
+        const c = p0;
+        return [a, b, c];
+      }
+      const [ax, bx, cx] = expand(x0, x1, x2);
+      const [ay, by, cy] = expand(y0, y1, y2);
+      function term(c, p, v) {
+        if (Math.abs(c) < 1e-8) return '';
+        const val = parseFloat(c.toFixed(4));
+        return p === 0 ? `${val}` : `${val}${v}${p > 1 ? `^${p}` : ''}`;
+      }
+      const xStr = [term(ax, 2, 't'), term(bx, 1, 't'), term(cx, 0, '')].filter(Boolean).join(' + ');
+      const yStr = [term(ay, 2, 't'), term(by, 1, 't'), term(cy, 0, '')].filter(Boolean).join(' + ');
+      document.getElementById('bezier-equation').innerHTML = `\\[ B(t) = \\begin{pmatrix} x(t) = ${xStr} \\ y(t) = ${yStr} \\end{pmatrix} \\]`;
+      if (window.MathJax) MathJax.typesetPromise([document.getElementById('bezier-equation')]);
+    }
+
+    function update() {
+      const P0 = [parseFloat(controls.P0_x.value), parseFloat(controls.P0_y.value)];
+      const P1 = [parseFloat(controls.P1_x.value), parseFloat(controls.P1_y.value)];
+      const P2 = [parseFloat(controls.P2_x.value), parseFloat(controls.P2_y.value)];
+      const maps = generateIFS(P0, P1, P2, 2);
+      displayIFSFormulas(maps);
+      drawChaos(maps);
+      displayPolynomial(P0, P1, P2);
+    }
+
+    update();
+  </script>
+</body>
+</html>
