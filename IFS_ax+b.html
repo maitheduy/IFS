@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chaos Game: Line Attractor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.2.0/math.min.js"></script>
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    canvas { border: 1px solid #ccc; }
+  </style>
+</head>
+<body class="bg-gray-100 p-4">
+  <h1 class="text-2xl font-bold mb-4">Chaos Game: Attractor of y = ax + b</h1>
+
+  <div class="flex flex-col lg:flex-row gap-6">
+    <div class="flex-1">
+      <div class="mb-4">
+        <label class="block">a (slope): <span id="a-val" class="font-mono">1</span></label>
+        <input id="a-slider" type="range" min="-5" max="5" step="0.1" value="1" class="w-full">
+      </div>
+      <div class="mb-4">
+        <label class="block">b (intercept): <span id="b-val" class="font-mono">0</span></label>
+        <input id="b-slider" type="range" min="-5" max="5" step="0.1" value="0" class="w-full">
+      </div>
+      <canvas id="canvas" width="600" height="400" class="bg-white"></canvas>
+    </div>
+
+    <div class="flex-1">
+      <h2 class="text-lg font-semibold mb-2">\( \text{Hệ hàm co} \)</h2>
+      <p class="mb-2">\( f_1(x, y) = \begin{bmatrix} \frac{1}{2} & 0 \\ a(u - w) & w \end{bmatrix} \begin{bmatrix} x \\ y \end{bmatrix} + \begin{bmatrix} 0 \\ b(1 - w) \end{bmatrix} \)</p>
+      <p class="mb-2">\( f_2(x, y) = \begin{bmatrix} \frac{1}{2} & 0 \\ a(u - w) & w \end{bmatrix} \begin{bmatrix} x \\ y \end{bmatrix} + \begin{bmatrix} \frac{1}{2} \\ \frac{a}{2} + b(1 - w) \end{bmatrix} \)</p>
+      <h2 class="text-lg font-semibold mt-4">\( \text{Biểu diễn động} \)</h2>
+      <div id="dynamic-formulas" class="font-mono text-sm text-gray-800 bg-gray-200 p-2 rounded"></div>
+      <h2 class="text-lg font-semibold mt-4">\( \text{Phương trình attractor:} \)</h2>
+      <div id="line-equation" class="font-mono text-lg text-blue-700">y = ax + b</div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let a = 1, b = 0;
+
+    const aSlider = document.getElementById('a-slider');
+    const bSlider = document.getElementById('b-slider');
+    const aVal = document.getElementById('a-val');
+    const bVal = document.getElementById('b-val');
+    const dynamicFormulas = document.getElementById('dynamic-formulas');
+    const lineEquation = document.getElementById('line-equation');
+
+    function f1(p, a, b) {
+      let x = 0.5 * p[0];
+      let y = 0.5 * p[1] + b * 0.5;
+      return [x, y];
+    }
+
+    function f2(p, a, b) {
+      let x = 0.5 * p[0] + 0.5;
+      let y = 0.5 * p[1] + a * 0.5 + b * 0.5;
+      return [x, y];
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      let p = [Math.random(), a * Math.random() + b];
+
+      for (let i = 0; i < 10000; i++) {
+        const fn = Math.random() < 0.5 ? f1 : f2;
+        const color = fn === f1 ? 'green' : 'red';
+        p = fn(p, a, b);
+
+        const canvasX = p[0] * canvas.width;
+        const canvasY = canvas.height - (p[1] * canvas.height / 10 + canvas.height / 2);
+
+        ctx.fillStyle = color;
+        ctx.fillRect(canvasX, canvasY, 2.5, 2.5); // tăng kích thước điểm lên 2.5 lần
+      }
+
+      // update dynamic formulas
+      dynamicFormulas.innerHTML = `
+        f_1(x, y) = [0.5x, 0.5y + ${(b * 0.5).toFixed(2)}]<br>
+        f_2(x, y) = [0.5x + 0.5, 0.5y + ${(a * 0.5 + b * 0.5).toFixed(2)}]
+      `;
+      lineEquation.textContent = `y = ${a}x + ${b}`;
+      MathJax.typeset();
+    }
+
+    aSlider.addEventListener('input', () => {
+      a = parseFloat(aSlider.value);
+      aVal.textContent = a;
+      draw();
+    });
+
+    bSlider.addEventListener('input', () => {
+      b = parseFloat(bSlider.value);
+      bVal.textContent = b;
+      draw();
+    });
+
+    draw();
+  </script>
+</body>
+</html>
