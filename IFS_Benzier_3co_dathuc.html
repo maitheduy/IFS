@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFS Attractor for y=ax^3+bx^2+cx+d</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.2.0/math.min.js"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        canvas {
+            width: 100%;
+            height: 400px;
+            border: 1px solid #ccc;
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .slider-container label {
+            width: 60px;
+            font-size: 14px;
+        }
+        .slider-container input[type="range"] {
+            flex-grow: 1;
+        }
+        .slider-container input[type="text"] {
+            width: 60px;
+            text-align: center;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 2px;
+        }
+        .mathjax-formula {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-6 min-h-screen">
+    <div class="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+            <h1 class="text-2xl font-bold text-center text-blue-700 mb-4">IFS Attractor for \( y = ax^3 + bx^2 + cx + d \)</h1>
+            <canvas id="canvas" width="800" height="400"></canvas>
+            <div class="space-y-2 mt-6">
+                <div class="slider-container">
+                    <label>P0_x:</label>
+                    <input type="range" id="P0_x" min="-0.5" max="1.5" step="0.01" value="0">
+                    <input type="text" id="P0_x_text" value="0.00">
+                </div>
+                <div class="slider-container">
+                    <label>P0_y:</label>
+                    <input type="range" id="P0_y" min="-0.5" max="1.5" step="0.01" value="0">
+                    <input type="text" id="P0_y_text" value="0.00">
+                </div>
+                <div class="slider-container">
+                    <label>P1_x:</label>
+                    <input type="range" id="P1_x" min="-0.5" max="1.5" step="0.01" value="0.33">
+                    <input type="text" id="P1_x_text" value="0.33">
+                </div>
+                <div class="slider-container">
+                    <label>P1_y:</label>
+                    <input type="range" id="P1_y" min="-0.5" max="1.5" step="0.01" value="0.04">
+                    <input type="text" id="P1_y_text" value="0.04">
+                </div>
+                <div class="slider-container">
+                    <label>P2_x:</label>
+                    <input type="range" id="P2_x" min="-0.5" max="1.5" step="0.01" value="0.67">
+                    <input type="text" id="P2_x_text" value="0.67">
+                </div>
+                <div class="slider-container">
+                    <label>P2_y:</label>
+                    <input type="range" id="P2_y" min="-0.5" max="1.5" step="0.01" value="0.30">
+                    <input type="text" id="P2_y_text" value="0.30">
+                </div>
+                <div class="slider-container">
+                    <label>P3_x:</label>
+                    <input type="range" id="P3_x" min="-0.5" max="1.5" step="0.01" value="1">
+                    <input type="text" id="P3_x_text" value="1.00">
+                </div>
+                <div class="slider-container">
+                    <label>P3_y:</label>
+                    <input type="range" id="P3_y" min="-0.5" max="1.5" step="0.01" value="1">
+                    <input type="text" id="P3_y_text" value="1.00">
+                </div>
+            </div>
+        </div>
+        <div>
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">Affine Transformations (IFS Functions):</h2>
+            <div id="mathjax-output" class="text-sm text-gray-800"></div>
+            <h2 class="text-lg font-semibold text-gray-800 mt-4 mb-2">Cubic Bézier Parametric Equation:</h2>
+            <div id="bezier-equation" class="text-sm text-gray-800"></div>
+            <h2 class="text-lg font-semibold text-gray-800 mt-4 mb-2">Least Squares Polynomial Approximation:</h2>
+            <div id="polynomial-equation" class="text-sm text-gray-800"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+            const mathjaxDiv = document.getElementById("mathjax-output");
+            const bezierEquationDiv = document.getElementById("bezier-equation");
+            const polynomialEquationDiv = document.getElementById("polynomial-equation");
+            const colorMap = ['#e6194b', '#3cb44b', '#4363d8']; // Red, Green, Blue
+
+            if (!ctx) {
+                console.error("Failed to get 2D context for canvas");
+                alert("Canvas rendering is not supported in this browser.");
+                return;
+            }
+
+            const sliders = ['P0_x', 'P0_y', 'P1_x', 'P1_y', 'P2_x', 'P2_y', 'P3_x', 'P3_y'].reduce((obj, id) => {
+                obj[id] = document.getElementById(id);
+                return obj;
+            }, {});
+
+            const texts = ['P0_x', 'P0_y', 'P1_x', 'P1_y', 'P2_x', 'P2_y', 'P3_x', 'P3_y'].reduce((obj, id) => {
+                obj[id] = document.getElementById(id + '_text');
+                return obj;
+            }, {});
+
+            function lerp(a, b, t) {
+                return [(1 - t) * a[0] + t * b[0], (1 - t) * a[1] + t * b[1]];
+            }
+
+            function computeBezierPoint(P0, P1, P2, P3, t) {
+                const u = 1 - t;
+                const x = u * u * u * P0[0] + 3 * u * u * t * P1[0] + 3 * u * t * t * P2[0] + t * t * t * P3[0];
+                const y = u * u * u * P0[1] + 3 * u * u * t * P1[1] + 3 * u * t * t * P2[1] + t * t * t * P3[1];
+                return [x, y];
+            }
+
+            function subdivideBezier(P0, P1, P2, P3, t) {
+                const A = lerp(P0, P1, t);
+                const B = lerp(P1, P2, t);
+                const C = lerp(P2, P3, t);
+                const D = lerp(A, B, t);
+                const E = lerp(B, C, t);
+                const F = lerp(D, E, t);
+                return [[P0, A, D, F], [F, E, C, P3]];
+            }
+
+            function generateIFS(P0, P1, P2, P3) {
+                // Subdivide at t = 1/3 and t = 2/3 to get three segments
+                const t1 = 1/3, t2 = 2/3;
+                const [seg1, temp] = subdivideBezier(P0, P1, P2, P3, t1);
+                const [seg2, seg3] = subdivideBezier(...temp, (t2 - t1) / (1 - t1));
+
+                // Points for each segment
+                const points = [
+                    [seg1[0], seg1[1], seg1[2]], // Segment 1
+                    [seg2[0], seg2[1], seg2[2]], // Segment 2
+                    [seg3[0], seg3[1], seg3[2]]  // Segment 3
+                ];
+
+                const maps = [];
+                const srcPoints = [P0, P1, P2]; // Use actual control points as source
+
+                points.forEach((dst, idx) => {
+                    const src = srcPoints;
+                    const A_mat = math.matrix([
+                        [src[1][0] - src[0][0], src[2][0] - src[0][0]],
+                        [src[1][1] - src[0][1], src[2][1] - src[0][1]]
+                    ]);
+                    const det = math.det(A_mat);
+                    if (Math.abs(det) < 1e-6) {
+                        console.warn(`Singular matrix for segment ${idx}, skipping`);
+                        return;
+                    }
+                    const B_mat = math.matrix([
+                        [dst[1][0] - dst[0][0], dst[2][0] - dst[0][0]],
+                        [dst[1][1] - dst[0][1], dst[2][1] - dst[0][1]]
+                    ]);
+                    try {
+                        const M = math.multiply(B_mat, math.inv(A_mat));
+                        const b = math.subtract(dst[0], math.multiply(M, src[0]));
+                        maps.push({ M: M._data, b: b._data, color: colorMap[idx % colorMap.length] });
+                    } catch (err) {
+                        console.warn(`Failed to compute mapping for segment ${idx}:`, err);
+                    }
+                });
+
+                return maps;
+            }
+
+            function leastSquaresPolynomial(points, degree = 3) {
+                if (points.length < degree + 1) {
+                    console.warn("Not enough points for least squares polynomial");
+                    return [0, 0, 0, 0];
+                }
+                const X = points.map(([x]) => {
+                    const row = [];
+                    for (let d = degree; d >= 0; d--) {
+                        row.push(Math.pow(x, d));
+                    }
+                    return row;
+                });
+                const y = points.map(p => p[1]);
+                const X_mat = math.matrix(X);
+                const y_vec = math.matrix(y);
+                try {
+                    const XtX = math.multiply(math.transpose(X_mat), X_mat);
+                    const XtY = math.multiply(math.transpose(X_mat), y_vec);
+                    const coeffs = math.multiply(math.inv(XtX), XtY)._data;
+                    return coeffs.reverse(); // [a0, a1, a2, a3]
+                } catch (err) {
+                    console.warn("Least squares failed:", err);
+                    return [0, 0, 0, 0];
+                }
+            }
+
+            function formatNumber(num) {
+                if (Math.abs(num) < 1e-6) return '0';
+                return Number(num).toFixed(2);
+            }
+
+            function displayIFSFormulas(ifsList) {
+                mathjaxDiv.innerHTML = ifsList.length === 0 ? '<p>No valid mappings generated due to singular matrices.</p>' : '';
+                ifsList.forEach((f, idx) => {
+                    const M = f.M;
+                    const b = f.b;
+                    const m11 = formatNumber(M[0][0]);
+                    const m12 = formatNumber(M[0][1]);
+                    const m21 = formatNumber(M[1][0]);
+                    const m22 = formatNumber(M[1][1]);
+                    const b1 = formatNumber(b[0]);
+                    const b2 = formatNumber(b[1]);
+                    const formula = `<div class="mathjax-formula">\\[ f_${idx + 1}(x, y) = \\begin{pmatrix} ${m11}x + ${m12}y + ${b1} \\\\ ${m21}x + ${m22}y + ${b2} \\end{pmatrix} \\]</div>`;
+                    mathjaxDiv.innerHTML += formula;
+                });
+                if (window.MathJax) {
+                    MathJax.typesetPromise([mathjaxDiv]).catch(err => {
+                        console.error('MathJax rendering error:', err);
+                    });
+                }
+            }
+
+            function displayBezierFormula(P0, P1, P2, P3) {
+                const x0 = P0[0], y0 = P0[1];
+                const x1 = P1[0], y1 = P1[1];
+                const x2 = P2[0], y2 = P2[1];
+                const x3 = P3[0], y3 = P3[1];
+
+                const a_x = -x0 + 3 * x1 - 3 * x2 + x3;
+                const b_x = 3 * x0 - 6 * x1 + 3 * x2;
+                const c_x = -3 * x0 + 3 * x1;
+                const d_x = x0;
+
+                const a_y = -y0 + 3 * y1 - 3 * y2 + y3;
+                const b_y = 3 * y0 - 6 * y1 + 3 * y2;
+                const c_y = -3 * y0 + 3 * y1;
+                const d_y = y0;
+
+                function formatTerm(coef, term) {
+                    if (Math.abs(coef) < 0.01) return '';
+                    const sign = coef >= 0 ? '+' : '-';
+                    const absCoef = Math.abs(coef).toFixed(2);
+                    return `${sign} ${absCoef}${term}`;
+                }
+
+                const x_terms = [
+                    formatTerm(a_x, 't^3'),
+                    formatTerm(b_x, 't^2'),
+                    formatTerm(c_x, 't'),
+                    formatTerm(d_x, '')
+                ].filter(Boolean).join(' ').replace(/^\+/, '').trim() || '0';
+
+                const y_terms = [
+                    formatTerm(a_y, 't^3'),
+                    formatTerm(b_y, 't^2'),
+                    formatTerm(c_y, 't'),
+                    formatTerm(d_y, '')
+                ].filter(Boolean).join(' ').replace(/^\+/, '').trim() || '0';
+
+                const formula = `\\[ B(t) = \\begin{pmatrix} ${x_terms} \\\\ ${y_terms} \\end{pmatrix} \\]`;
+                bezierEquationDiv.innerHTML = formula;
+            }
+
+            function displayPolynomialFormula(coeffs) {
+                function formatTerm(coef, term) {
+                    if (Math.abs(coef) < 0.01) return '';
+                    const sign = coef >= 0 ? '+' : '-';
+                    const absCoef = Math.abs(coef).toFixed(2);
+                    return `${sign} ${absCoef}${term}`;
+                }
+
+                const poly_terms = [
+                    formatTerm(coeffs[3], 'x^3'),
+                    formatTerm(coeffs[2], 'x^2'),
+                    formatTerm(coeffs[1], 'x'),
+                    formatTerm(coeffs[0], '')
+                ].filter(Boolean).join(' ').replace(/^\+/, '').trim() || '0';
+
+                const formula = `\\[ y = ${poly_terms} \\]`;
+                polynomialEquationDiv.innerHTML = formula;
+
+                if (window.MathJax) {
+                    MathJax.typesetPromise([bezierEquationDiv, polynomialEquationDiv]).catch(err => {
+                        console.error('MathJax rendering error:', err);
+                    });
+                }
+            }
+
+            function transformToCanvas(x, y) {
+                const xMin = -0.5, xMax = 1.5, yMin = -0.5, yMax = 1.5;
+                const canvasX = ((x - xMin) / (xMax - xMin)) * canvas.width;
+                const canvasY = canvas.height - ((y - yMin) / (yMax - yMin)) * canvas.height;
+                return [canvasX, canvasY];
+            }
+
+            function drawChaos(P0, P1, P2, P3) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const maps = generateIFS(P0, P1, P2, P3);
+                displayIFSFormulas(maps);
+                displayBezierFormula(P0, P1, P2, P3);
+
+                if (maps.length === 0) {
+                    console.warn("No valid IFS mappings to draw");
+                    ctx.font = '20px Arial';
+                    ctx.fillStyle = 'red';
+                    ctx.fillText('No valid IFS mappings generated', 50, 50);
+                    return;
+                }
+
+                let pt = [Math.random(), Math.random()];
+                let drawnPoints = 0;
+                const samplePoints = [];
+
+                // Warm-up iterations
+                for (let i = 0; i < 100; i++) {
+                    const idx = Math.floor(Math.random() * maps.length);
+                    const f = maps[idx];
+                    pt = math.add(math.multiply(f.M, pt), f.b);
+                }
+
+                // Main Chaos Game loop
+                for (let i = 0; i < 60000; i++) {
+                    const idx = Math.floor(Math.random() * maps.length);
+                    const f = maps[idx];
+                    pt = math.add(math.multiply(f.M, pt), f.b);
+
+                    if (pt[0] < -0.5 || pt[0] > 1.5 || pt[1] < -0.5 || pt[1] > 1.5) continue;
+
+                    if (i % 100 === 0 && samplePoints.length < 1000) {
+                        samplePoints.push([pt[0], pt[1]]);
+                    }
+
+                    const [x, y] = transformToCanvas(pt[0], pt[1]);
+                    ctx.fillStyle = f.color;
+                    ctx.fillRect(x, y, 3, 3);
+                    drawnPoints++;
+                }
+
+                // Compute and display polynomial approximation
+                const coeffs = leastSquaresPolynomial(samplePoints);
+                displayPolynomialFormula(coeffs);
+
+                // Draw control points as purple plus signs
+                [P0, P1, P2, P3].forEach((p, idx) => {
+                    const [cx, cy] = transformToCanvas(p[0], p[1]);
+                    ctx.strokeStyle = '#800080'; // Purple
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(cx - 8, cy);
+                    ctx.lineTo(cx + 8, cy);
+                    ctx.moveTo(cx, cy - 8);
+                    ctx.lineTo(cx, cy + 8);
+                    ctx.stroke();
+                    ctx.fillStyle = 'white';
+                    ctx.font = '12px Arial';
+                    ctx.fillText(`P${idx}`, cx + 10, cy + 4);
+                });
+
+                console.log(`Drawn points: ${drawnPoints}/60000`);
+                console.log(`Sampled points for polynomial: ${samplePoints.length}`);
+            }
+
+            function update() {
+                const P0 = [parseFloat(sliders.P0_x.value), parseFloat(sliders.P0_y.value)];
+                const P1 = [parseFloat(sliders.P1_x.value), parseFloat(sliders.P1_y.value)];
+                const P2 = [parseFloat(sliders.P2_x.value), parseFloat(sliders.P2_y.value)];
+                const P3 = [parseFloat(sliders.P3_x.value), parseFloat(sliders.P3_y.value)];
+
+                texts.P0_x.value = P0[0].toFixed(2);
+                texts.P0_y.value = P0[1].toFixed(2);
+                texts.P1_x.value = P1[0].toFixed(2);
+                texts.P1_y.value = P1[1].toFixed(2);
+                texts.P2_x.value = P2[0].toFixed(2);
+                texts.P2_y.value = P2[1].toFixed(2);
+                texts.P3_x.value = P3[0].toFixed(2);
+                texts.P3_y.value = P3[1].toFixed(2);
+
+                try {
+                    drawChaos(P0, P1, P2, P3);
+                } catch (err) {
+                    console.error('Error in drawChaos:', err);
+                }
+            }
+
+            Object.keys(sliders).forEach(k => {
+                sliders[k].addEventListener('input', update);
+            });
+
+            Object.keys(texts).forEach(k => {
+                texts[k].addEventListener('change', () => {
+                    const val = parseFloat(texts[k].value);
+                    if (isNaN(val) || val < -0.5 || val > 1.5) {
+                        texts[k].value = sliders[k].value;
+                        return;
+                    }
+                    sliders[k].value = val;
+                    update();
+                });
+            });
+
+            update();
+        });
+    </script>
+</body>
+</html>
