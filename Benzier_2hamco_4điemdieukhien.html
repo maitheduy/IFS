@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IFS Bézier with 4 Points + Least Squares + Determinant Probabilities</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.2.0/math.min.js"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    canvas { 
+      width: 100%; 
+      height: 400px; 
+      border: 1px solid #ccc;
+      background-color: #f8fafc;
+    }
+    .slider-container {
+      display: flex; 
+      align-items: center; 
+      gap: 8px; 
+      margin-bottom: 8px;
+    }
+    .slider-container label { 
+      width: 80px; 
+      font-size: 14px;
+      font-family: monospace;
+    }
+    .slider-container input[type="range"] { 
+      flex-grow: 1; 
+      height: 8px;
+      border-radius: 4px;
+    }
+    .slider-container input[type="text"] {
+      width: 60px; 
+      text-align: center; 
+      border: 1px solid #ccc;
+      border-radius: 4px; 
+      padding: 4px;
+      font-family: monospace;
+    }
+    .math-container {
+      background-color: #f1f5f9;
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      overflow-x: auto;
+    }
+    .math-equation {
+      font-size: 16px;
+      line-height: 1.6;
+    }
+    .point-label {
+      font-weight: bold;
+      color: #1e40af;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 p-6">
+  <div class="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div>
+      <h1 class="text-2xl font-bold text-center text-blue-700 mb-4">IFS Bézier (4 Points → 2 Maps)</h1>
+      
+      <!-- Canvas với background và border -->
+      <div class="bg-white p-2 rounded-lg shadow-md">
+        <canvas id="canvas" width="800" height="400"></canvas>
+      </div>
+      
+      <!-- Sliders với thiết kế cải tiến -->
+      <div class="bg-white p-4 rounded-lg shadow-md mt-4">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">Control Points:</h2>
+        <div id="sliders" class="space-y-3"></div>
+      </div>
+      
+      <!-- Buttons với hiệu ứng hover -->
+      <div class="flex flex-wrap gap-3 mt-4">
+        <button id="show-attractor" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+          Show Attractor Only
+        </button>
+        <button id="show-triangles" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors">
+          Show Triangles Only
+        </button>
+        <button id="show-both" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-800 transition-colors">
+          Show Both
+        </button>
+      </div>
+    </div>
+    
+    <div>
+      <!-- Math containers với scroll khi cần -->
+      <div class="math-container">
+        <h2 class="text-lg font-semibold text-gray-800 mb-2">Affine Transformations (IFS):</h2>
+        <div id="mathjax-output" class="math-equation"></div>
+      </div>
+      
+      <div class="math-container">
+        <h2 class="text-lg font-semibold text-gray-800 mb-2">Cubic Bézier Parametric Equation:</h2>
+        <div id="bezier-equation" class="math-equation"></div>
+      </div>
+      
+      <div class="math-container">
+        <h2 class="text-lg font-semibold text-gray-800 mb-2">Least Squares Polynomial Approximation:</h2>
+        <div id="polynomial-equation" class="math-equation"></div>
+      </div>
+      
+      <!-- Thêm phần giải thích -->
+      <div class="bg-white p-4 rounded-lg shadow-md mt-4">
+        <h2 class="text-lg font-semibold text-gray-800 mb-2">Visual Guide:</h2>
+        <div class="flex items-center gap-2 mb-2">
+          <div class="w-4 h-4 bg-[#e6194b]"></div>
+          <span>First transformation (left segment)</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-[#3cb44b]"></div>
+          <span>Second transformation (right segment)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const points = ['P0','P1','P2','P3'];
+    const colorMap = ['#e6194b', '#3cb44b'];
+    const sliders = {}, texts = {};
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const slidersDiv = document.getElementById("sliders");
+    const mathjaxDiv = document.getElementById("mathjax-output");
+    const bezierEquationDiv = document.getElementById("bezier-equation");
+    const polynomialEquationDiv = document.getElementById("polynomial-equation");
+    let displayMode = "both";
+
+    // Thêm event listeners cho các nút
+    document.getElementById("show-attractor").onclick = () => { displayMode = "attractor"; update(); };
+    document.getElementById("show-triangles").onclick = () => { displayMode = "triangles"; update(); };
+    document.getElementById("show-both").onclick = () => { displayMode = "both"; update(); };
+
+    // Tạo sliders với thiết kế cải tiến
+    points.forEach((p, i) => {
+      ['x','y'].forEach(coord => {
+        const id = `${p}_${coord}`;
+        const init = (coord === 'x') ? (i / 3).toFixed(2) : (i % 2 === 0 ? 0 : 1);
+        slidersDiv.innerHTML += `
+          <div class="slider-container">
+            <label class="point-label">${id}:</label>
+            <input type="range" id="${id}" min="-0.5" max="1.5" step="0.01" value="${init}" class="slider">
+            <input type="text" id="${id}_text" value="${init}" class="value-display">
+          </div>`;
+      });
+    });
+
+    // Thiết lập event listeners cho sliders
+    points.forEach(p => {
+      ['x','y'].forEach(c => {
+        const id = `${p}_${c}`;
+        sliders[id] = document.getElementById(id);
+        texts[id] = document.getElementById(`${id}_text`);
+        sliders[id].addEventListener('input', () => {
+          texts[id].value = sliders[id].value;
+          update();
+        });
+        texts[id].addEventListener('change', () => {
+          const val = parseFloat(texts[id].value);
+          if (!isNaN(val)) {
+            sliders[id].value = val;
+            update();
+          }
+        });
+      });
+    });
+
+    // Hàm chuyển đổi tọa độ
+    const transformToCanvas = (x, y) => [
+      ((x + 0.5) / 2) * canvas.width, 
+      canvas.height - ((y + 0.5) / 2) * canvas.height
+    ];
+
+    // Tính điểm Bézier
+    const bezierPoint = (P, t) => {
+      const u = 1 - t;
+      return [
+        u**3*P[0][0] + 3*u**2*t*P[1][0] + 3*u*t**2*P[2][0] + t**3*P[3][0],
+        u**3*P[0][1] + 3*u**2*t*P[1][1] + 3*u*t**2*P[2][1] + t**3*P[3][1]
+      ];
+    };
+
+    // Tạo IFS từ các điểm Bézier
+    const generateIFS = (P) => {
+      const src = [P[0], P[1], P[2]];
+      const left = [0, 0.25, 0.5].map(t => bezierPoint(P, t));
+      const right = [0.5, 0.75, 1].map(t => bezierPoint(P, t));
+      
+      return [left, right].map((dst, i) => {
+        const A = math.matrix([
+          [src[1][0] - src[0][0], src[2][0] - src[0][0]],
+          [src[1][1] - src[0][1], src[2][1] - src[0][1]]
+        ]);
+        const B = math.matrix([
+          [dst[1][0] - dst[0][0], dst[2][0] - dst[0][0]],
+          [dst[1][1] - dst[0][1], dst[2][1] - dst[0][1]]
+        ]);
+        const M = math.multiply(B, math.inv(A));
+        const b = math.subtract(dst[0], math.multiply(M, src[0]));
+        return { 
+          M: M._data, 
+          b: b._data, 
+          color: colorMap[i], 
+          det: Math.abs(math.det(M)),
+          points: dst
+        };
+      });
+    };
+
+    // Vẽ attractor và các tam giác
+    const drawChaos = (P) => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const maps = generateIFS(P);
+      const total = maps[0].det + maps[1].det;
+      
+      // Vẽ tam giác nếu cần
+      if (displayMode !== "attractor") {
+        // Vẽ tam giác gốc
+        ctx.strokeStyle = '#6b7280';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const [p0, p1, p2] = [P[0], P[1], P[2]];
+        const [c0, c1, c2] = [transformToCanvas(p0[0], p0[1]), 
+                              transformToCanvas(p1[0], p1[1]), 
+                              transformToCanvas(p2[0], p2[1])];
+        ctx.moveTo(c0[0], c0[1]);
+        ctx.lineTo(c1[0], c1[1]);
+        ctx.lineTo(c2[0], c2[1]);
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Vẽ các tam giác đích
+        maps.forEach((map, i) => {
+          ctx.strokeStyle = colorMap[i];
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          const [p0, p1, p2] = map.points;
+          const [c0, c1, c2] = [transformToCanvas(p0[0], p0[1]), 
+                                transformToCanvas(p1[0], p1[1]), 
+                                transformToCanvas(p2[0], p2[1])];
+          ctx.moveTo(c0[0], c0[1]);
+          ctx.lineTo(c1[0], c1[1]);
+          ctx.lineTo(c2[0], c2[1]);
+          ctx.closePath();
+          ctx.stroke();
+        });
+      }
+      
+      // Vẽ attractor nếu cần
+      if (displayMode !== "triangles") {
+        let pt = [Math.random(), Math.random()];
+        for (let i = 0; i < 100; i++) pt = math.add(math.multiply(maps[0].M, pt), maps[0].b);
+        
+        const samples = [];
+        for (let i = 0; i < 10000; i++) {
+          const r = Math.random() * total;
+          const f = (r < maps[0].det) ? maps[0] : maps[1];
+          pt = math.add(math.multiply(f.M, pt), f.b);
+          const [x, y] = pt;
+          const [cx, cy] = transformToCanvas(x, y);
+          ctx.fillStyle = f.color;
+          ctx.fillRect(cx, cy, 2, 2);
+          if (i % 10 === 0) samples.push([x, y]);
+        }
+        return samples;
+      }
+      return [];
+    };
+
+    // Tính xấp xỉ đa thức bằng bình phương tối thiểu
+    const leastSquaresPolynomial = (samples, degree = 3) => {
+      if (samples.length === 0) return Array(degree + 1).fill(0);
+      const X = samples.map(p => Array.from({ length: degree + 1 }, (_, i) => Math.pow(p[0], degree - i)));
+      const y = samples.map(p => p[1]);
+      const Xt = math.transpose(X);
+      const XtX = math.multiply(Xt, X);
+      const XtY = math.multiply(Xt, y);
+      return math.multiply(math.inv(XtX), XtY);
+    };
+
+    // Định dạng số cho hiển thị
+    const format = v => Math.abs(v) < 1e-6 ? '0' : Number(v).toFixed(4);
+    
+    // Hiển thị đa thức
+    const displayPolynomial = (coeffs) => {
+      if (!coeffs || coeffs.length === 0) {
+        polynomialEquationDiv.innerHTML = `\\[ \\text{No samples available for approximation} \\]`;
+        return;
+      }
+      
+      const terms = coeffs.map((c, i) => {
+        const power = coeffs.length - 1 - i;
+        const coeff = format(c);
+        if (power === 0) return coeff;
+        if (power === 1) return `${coeff}x`;
+        return `${coeff}x^{${power}}`;
+      }).join(' + ').replace(/\+\s\-/g, '- ');
+      
+      polynomialEquationDiv.innerHTML = `\\[ y \\approx ${terms} \\]`;
+      MathJax.typesetPromise();
+    };
+
+    // Cập nhật toàn bộ giao diện
+    const update = () => {
+      const P = points.map(p => [parseFloat(sliders[`${p}_x`].value), parseFloat(sliders[`${p}_y`].value)]);
+      const samples = drawChaos(P);
+      const maps = generateIFS(P);
+      
+      // Cập nhật công thức affine
+      mathjaxDiv.innerHTML = maps.map((f, i) => `\\[
+        f_{${i + 1}}(\\mathbf{x}) = 
+        \\underbrace{
+          \\begin{pmatrix}
+            ${format(f.M[0][0])} & ${format(f.M[0][1])} \\\\
+            ${format(f.M[1][0])} & ${format(f.M[1][1])}
+          \\end{pmatrix}
+        }_{A_{${i + 1}}}
+        \\mathbf{x} + 
+        \\underbrace{
+          \\begin{pmatrix}
+            ${format(f.b[0])} \\\\
+            ${format(f.b[1])}
+          \\end{pmatrix}
+        }_{\\mathbf{b}_{${i + 1}}}
+        \\quad (\\det = ${format(f.det)})
+      \\]`).join('<div class="my-4"></div>');
+      
+      // Cập nhật công thức Bézier
+      bezierEquationDiv.innerHTML = `\\[
+        \\mathbf{B}(t) = (1-t)^3\\mathbf{P}_0 + 3(1-t)^2t\\mathbf{P}_1 + 3(1-t)t^2\\mathbf{P}_2 + t^3\\mathbf{P}_3
+      \\]`;
+      
+      // Cập nhật đa thức xấp xỉ
+      displayPolynomial(leastSquaresPolynomial(samples));
+      
+      // Render lại MathJax
+      if (window.MathJax) {
+        MathJax.typesetPromise();
+      }
+    };
+
+    // Khởi tạo
+    update();
+  </script>
+</body>
+</html>
